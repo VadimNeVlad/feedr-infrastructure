@@ -80,7 +80,7 @@ services:
     <<: *defaults
     image: nginxinc/nginx-unprivileged:alpine@sha256:26b0bf6fbf07297983cb341998d79c831508787de26627dd2a112321b9c3a4af
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${GATEWAY_PUBLISH:-127.0.0.1:8080}:8080"
     networks:
       - edge
     volumes:
