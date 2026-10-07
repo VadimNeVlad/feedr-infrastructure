@@ -1,5 +1,9 @@
 .env
 
+# Server state written by scripts/deploy.sh: current image tags and the deploy lock.
+versions.env
+.deploy.lock
+
 # TLS material and ACME tokens live only on the server; the empty directories are kept
 # so the gateway bind mounts exist everywhere (otherwise Docker creates them as root).
 certs/*
