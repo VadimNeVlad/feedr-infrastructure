@@ -1,0 +1,15 @@
+services:
+  migrate:
+    build:
+      context: ../feedr-backend
+      target: migrate
+
+  backend:
+    build:
+      context: ../feedr-backend
+      target: prod
+
+  frontend:
+    build:
+      context: ../feedr-frontend
+      target: prod

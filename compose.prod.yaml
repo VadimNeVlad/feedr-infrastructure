@@ -33,9 +33,7 @@ services:
   
   migrate:
     <<: *defaults
-    build:
-      context: ../feedr-backend
-      target: migrate
+    image: ghcr.io/vadimnevlad/feedr-backend-migrate:${BACKEND_TAG:?set BACKEND_TAG in .env}
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     networks:
@@ -47,10 +45,7 @@ services:
   
   backend:
     <<: *defaults
-    image: feedr-prod-backend
-    build:
-      context: ../feedr-backend
-      target: prod
+    image: ghcr.io/vadimnevlad/feedr-backend:${BACKEND_TAG:?set BACKEND_TAG in .env}
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
@@ -69,10 +64,7 @@ services:
 
   frontend:
     <<: *defaults
-    image: feedr-prod-frontend
-    build:
-      context: ../feedr-frontend
-      target: prod
+    image: ghcr.io/vadimnevlad/feedr-frontend:${FRONTEND_TAG:?set FRONTEND_TAG in .env}
     networks:
       - edge
   
