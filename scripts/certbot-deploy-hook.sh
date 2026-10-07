@@ -20,9 +20,19 @@ NGINX_UID=101
 install -m 644 -o "$NGINX_UID" -g "$NGINX_UID" "$RENEWED_LINEAGE/fullchain.pem" "$DEST/fullchain.pem"
 install -m 600 -o "$NGINX_UID" -g "$NGINX_UID" "$RENEWED_LINEAGE/privkey.pem" "$DEST/privkey.pem"
 
+# Compose interpolates the whole file for every command, so it needs both env files:
+# secrets in .env, image tags in versions.env (same invocation as scripts/deploy.sh).
+compose() {
+    docker compose --project-directory "$APP_DIR" -f "$APP_DIR/compose.prod.yaml" \
+        --env-file "$APP_DIR/.env" --env-file "$APP_DIR/versions.env" "$@"
+}
+
 # Reload only if the gateway is running; on the very first issuance it may still be on plain HTTP.
-if docker compose -f "$APP_DIR/compose.prod.yaml" ps --status running --services | grep -qx gateway; then
+# Query first, outside `if`: a failing command in an `if` condition does not trip `set -e`,
+# so a broken compose call would silently skip the reload and still report success.
+running="$(compose ps --status running --services)"
+if printf '%s\n' "$running" | grep -qx gateway; then
     # nginx prints its "signal process started" notice to stderr, which certbot reports as
     # "error output". Failures still surface through the exit code (set -e).
-    docker compose -f "$APP_DIR/compose.prod.yaml" exec -T gateway nginx -s reload 2>&1
+    compose exec -T gateway nginx -s reload 2>&1
 fi
