@@ -22,5 +22,7 @@ install -m 600 -o "$NGINX_UID" -g "$NGINX_UID" "$RENEWED_LINEAGE/privkey.pem" "$
 
 # Reload only if the gateway is running; on the very first issuance it may still be on plain HTTP.
 if docker compose -f "$APP_DIR/compose.prod.yaml" ps --status running --services | grep -qx gateway; then
-    docker compose -f "$APP_DIR/compose.prod.yaml" exec -T gateway nginx -s reload
+    # nginx prints its "signal process started" notice to stderr, which certbot reports as
+    # "error output". Failures still surface through the exit code (set -e).
+    docker compose -f "$APP_DIR/compose.prod.yaml" exec -T gateway nginx -s reload 2>&1
 fi
