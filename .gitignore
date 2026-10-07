@@ -1,1 +1,8 @@
 .env
+
+# TLS material and ACME tokens live only on the server; the empty directories are kept
+# so the gateway bind mounts exist everywhere (otherwise Docker creates them as root).
+certs/*
+!certs/.gitkeep
+acme/*
+!acme/.gitkeep
