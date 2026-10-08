@@ -1,0 +1,88 @@
+name: Deploy
+
+# Title of each run in the Actions list: what, which version, who started it.
+run-name: Deploy ${{ inputs.service }} ${{ inputs.tag }} by @${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Application to deploy
+        type: choice
+        options:
+          - backend
+          - frontend
+        required: true
+      tag:
+        description: Image tag published by CI (sha-<7+ hex chars>, e.g. sha-05d46d4)
+        type: string
+        required: true
+
+# The job only talks to the server over SSH: no repository access, no GitHub API.
+permissions: {}
+
+# One production deploy at a time; a queued deploy waits instead of cancelling a running one
+# (cancelling between migrations and the backend restart would leave production half-updated).
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.service }} ${{ inputs.tag }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://devmakeops.xyz
+    # Inputs reach the shell only through environment variables, never as ${{ }} inside `run:`
+    # (GitHub would paste the raw text into the script before bash runs it: script injection).
+    env:
+      SERVICE: ${{ inputs.service }}
+      TAG: ${{ inputs.tag }}
+      DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+    steps:
+      - name: Validate inputs
+        run: |
+          [[ "$SERVICE" =~ ^(backend|frontend)$ ]] || { echo "::error::service must be backend or frontend"; exit 1; }
+          [[ "$TAG" =~ ^sha-[0-9a-f]{7,40}$ ]] || { echo "::error::tag must look like sha-05d46d4"; exit 1; }
+          [[ -n "$DEPLOY_HOST" && -n "$DEPLOY_USER" ]] || { echo "::error::DEPLOY_HOST / DEPLOY_USER are not set in the production environment"; exit 1; }
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          [[ -n "$DEPLOY_SSH_KEY" && -n "$DEPLOY_KNOWN_HOSTS" ]] || { echo "::error::DEPLOY_SSH_KEY / DEPLOY_KNOWN_HOSTS are not set in the production environment"; exit 1; }
+          umask 077
+          printf '%s\n' "$DEPLOY_SSH_KEY" > "$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$RUNNER_TEMP/known_hosts"
+
+      - name: Deploy
+        # The key is pinned to scripts/deploy.sh on the server (command="..." in authorized_keys);
+        # the two arguments arrive there as SSH_ORIGINAL_COMMAND. Its exit code is this step's result.
+        run: |
+          ssh -i "$RUNNER_TEMP/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
+            -o BatchMode=yes \
+            -o ConnectTimeout=15 \
+            -o ServerAliveInterval=30 \
+            "$DEPLOY_USER@$DEPLOY_HOST" "$SERVICE" "$TAG"
+
+      - name: Summary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          {
+            echo "### Deploy ${SERVICE} \`${TAG}\`: ${JOB_STATUS}"
+            echo "Started by @${ACTOR}. Server log: \`journalctl -t feedr-deploy\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove SSH key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/deploy_key" "$RUNNER_TEMP/known_hosts"
