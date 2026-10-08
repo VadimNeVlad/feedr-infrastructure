@@ -1,24 +1,32 @@
 name: Deploy
 
-# Title of each run in the Actions list: what, which version, who started it.
-run-name: Deploy ${{ inputs.service }} ${{ inputs.tag }} by @${{ github.actor }}
+# Title of each run in the Actions list: what, which versions, who started it.
+run-name: >-
+  Deploy backend=${{ inputs.backend_tag || '-' }} frontend=${{ inputs.frontend_tag || '-' }}
+  by @${{ github.actor }}
 
+# Manual release: the release manager decides when production changes.
+#   Weekly release:  backend_tag=latest  frontend_tag=latest
+#   Hotfix:          frontend_tag=latest           (backend left empty = not touched)
+#   Rollback:        backend_tag=sha-29d0092       (any earlier tag)
+# From a terminal:
+#   gh workflow run deploy.yml -R VadimNeVlad/feedr-infrastructure -f backend_tag=latest -f frontend_tag=latest
 on:
   workflow_dispatch:
     inputs:
-      service:
-        description: Application to deploy
-        type: choice
-        options:
-          - backend
-          - frontend
-        required: true
-      tag:
-        description: Image tag published by CI (sha-<7+ hex chars>, e.g. sha-05d46d4)
+      backend_tag:
+        description: "Backend: latest, sha-xxxxxxx, or empty to skip"
         type: string
-        required: true
+        required: false
+        default: ""
+      frontend_tag:
+        description: "Frontend: latest, sha-xxxxxxx, or empty to skip"
+        type: string
+        required: false
+        default: ""
 
-# The job only talks to the server over SSH: no repository access, no GitHub API.
+# GITHUB_TOKEN is only used to read CI runs of the (public) application repositories
+# when resolving `latest`; it needs no permissions on this repository.
 permissions: {}
 
 # One production deploy at a time; a queued deploy waits instead of cancelling a running one
@@ -29,25 +37,52 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy ${{ inputs.service }} ${{ inputs.tag }}
+    name: Deploy
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment:
       name: production
       url: https://devmakeops.xyz
     # Inputs reach the shell only through environment variables, never as ${{ }} inside `run:`
     # (GitHub would paste the raw text into the script before bash runs it: script injection).
     env:
-      SERVICE: ${{ inputs.service }}
-      TAG: ${{ inputs.tag }}
+      BACKEND_INPUT: ${{ inputs.backend_tag }}
+      FRONTEND_INPUT: ${{ inputs.frontend_tag }}
       DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
       DEPLOY_USER: ${{ vars.DEPLOY_USER }}
     steps:
-      - name: Validate inputs
+      - name: Resolve tags
+        id: tags
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          [[ "$SERVICE" =~ ^(backend|frontend)$ ]] || { echo "::error::service must be backend or frontend"; exit 1; }
-          [[ "$TAG" =~ ^sha-[0-9a-f]{7,40}$ ]] || { echo "::error::tag must look like sha-05d46d4"; exit 1; }
+          # latest = the newest commit on master whose whole CI run (tests + publish) succeeded,
+          # i.e. an image that exists and passed every check. Not simply the last commit.
+          resolve() {  # resolve <input> <repo>
+            local input="$1" repo="$2" sha
+            if [[ -z "$input" ]]; then
+              echo ""
+            elif [[ "$input" == latest ]]; then
+              sha="$(gh run list -R "VadimNeVlad/$repo" --workflow ci.yml --branch master \
+                --event push --status success --limit 1 --json headSha --jq '.[0].headSha')"
+              [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::no successful CI run on master in $repo" >&2; return 1; }
+              echo "sha-${sha:0:7}"
+            elif [[ "$input" =~ ^sha-[0-9a-f]{7,40}$ ]]; then
+              echo "$input"
+            else
+              echo "::error::tag must be empty, latest or sha-xxxxxxx (e.g. sha-05d46d4)" >&2
+              return 1
+            fi
+          }
+
+          backend="$(resolve "$BACKEND_INPUT" feeds-backend)"
+          frontend="$(resolve "$FRONTEND_INPUT" feedR)"
+          [[ -n "$backend" || -n "$frontend" ]] || { echo "::error::set backend_tag and/or frontend_tag"; exit 1; }
           [[ -n "$DEPLOY_HOST" && -n "$DEPLOY_USER" ]] || { echo "::error::DEPLOY_HOST / DEPLOY_USER are not set in the production environment"; exit 1; }
+
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+          echo "Resolved: backend=${backend:--} frontend=${frontend:--}"
 
       - name: Configure SSH
         env:
@@ -63,31 +98,54 @@ jobs:
           # Fail here with a clear message instead of a vague error at connect time.
           ssh-keygen -y -f "$RUNNER_TEMP/deploy_key" > /dev/null \
             || { echo "::error::DEPLOY_SSH_KEY is not a valid private key (paste the whole file incl. BEGIN/END lines, not the .pub)"; exit 1; }
+          # All connection options in one place; deploy steps just run `ssh -F <config> prod ...`.
+          cat > "$RUNNER_TEMP/ssh_config" <<EOF
+          Host prod
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            IdentityFile $RUNNER_TEMP/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile $RUNNER_TEMP/known_hosts
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 30
+          EOF
 
-      - name: Deploy
-        # The key is pinned to scripts/deploy.sh on the server (command="..." in authorized_keys);
-        # the two arguments arrive there as SSH_ORIGINAL_COMMAND. Its exit code is this step's result.
-        run: |
-          ssh -i "$RUNNER_TEMP/deploy_key" \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$RUNNER_TEMP/known_hosts" \
-            -o BatchMode=yes \
-            -o ConnectTimeout=15 \
-            -o ServerAliveInterval=30 \
-            "$DEPLOY_USER@$DEPLOY_HOST" "$SERVICE" "$TAG"
+      # Backend first: API changes are backward compatible, so the new backend also serves the
+      # old frontend. If the backend fails (deploy.sh rolls it back), the frontend is not touched.
+      # The key is pinned to scripts/deploy.sh on the server (command="..." in authorized_keys);
+      # the arguments arrive there as SSH_ORIGINAL_COMMAND. Its exit code is the step's result.
+      - name: Deploy backend
+        if: steps.tags.outputs.backend != ''
+        env:
+          TAG: ${{ steps.tags.outputs.backend }}
+        run: ssh -F "$RUNNER_TEMP/ssh_config" prod backend "$TAG"
+
+      - name: Deploy frontend
+        if: steps.tags.outputs.frontend != ''
+        env:
+          TAG: ${{ steps.tags.outputs.frontend }}
+        run: ssh -F "$RUNNER_TEMP/ssh_config" prod frontend "$TAG"
 
       - name: Summary
         if: always()
         env:
           JOB_STATUS: ${{ job.status }}
           ACTOR: ${{ github.actor }}
+          BACKEND: ${{ steps.tags.outputs.backend }}
+          FRONTEND: ${{ steps.tags.outputs.frontend }}
         run: |
           {
-            echo "### Deploy ${SERVICE} \`${TAG}\`: ${JOB_STATUS}"
+            echo "### Deploy: ${JOB_STATUS}"
+            echo "| Service | Requested | Deployed tag |"
+            echo "|---|---|---|"
+            echo "| backend | \`${BACKEND_INPUT:--}\` | \`${BACKEND:--}\` |"
+            echo "| frontend | \`${FRONTEND_INPUT:--}\` | \`${FRONTEND:--}\` |"
+            echo
             echo "Started by @${ACTOR}. Server log: \`journalctl -t feedr-deploy\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove SSH key
         if: always()
-        run: rm -f "$RUNNER_TEMP/deploy_key" "$RUNNER_TEMP/known_hosts"
+        run: rm -f "$RUNNER_TEMP/deploy_key" "$RUNNER_TEMP/known_hosts" "$RUNNER_TEMP/ssh_config"
