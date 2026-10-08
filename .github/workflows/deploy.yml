@@ -56,8 +56,13 @@ jobs:
         run: |
           [[ -n "$DEPLOY_SSH_KEY" && -n "$DEPLOY_KNOWN_HOSTS" ]] || { echo "::error::DEPLOY_SSH_KEY / DEPLOY_KNOWN_HOSTS are not set in the production environment"; exit 1; }
           umask 077
-          printf '%s\n' "$DEPLOY_SSH_KEY" > "$RUNNER_TEMP/deploy_key"
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$RUNNER_TEMP/known_hosts"
+          # Strip CR: a key pasted through the Windows clipboard gets CRLF line endings,
+          # which OpenSSH rejects with an unhelpful "error in libcrypto".
+          printf '%s\n' "$DEPLOY_SSH_KEY" | tr -d '\r' > "$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" | tr -d '\r' > "$RUNNER_TEMP/known_hosts"
+          # Fail here with a clear message instead of a vague error at connect time.
+          ssh-keygen -y -f "$RUNNER_TEMP/deploy_key" > /dev/null \
+            || { echo "::error::DEPLOY_SSH_KEY is not a valid private key (paste the whole file incl. BEGIN/END lines, not the .pub)"; exit 1; }
 
       - name: Deploy
         # The key is pinned to scripts/deploy.sh on the server (command="..." in authorized_keys);
