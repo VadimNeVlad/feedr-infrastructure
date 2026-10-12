@@ -10,3 +10,16 @@ certs/*
 !certs/.gitkeep
 acme/*
 !acme/.gitkeep
+
+# Terraform: state holds the data of every resource (and can hold secrets), providers are
+# downloaded by `terraform init`. .terraform.lock.hcl IS committed: it pins provider versions.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
