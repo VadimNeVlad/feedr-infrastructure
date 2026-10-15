@@ -1,7 +1,7 @@
 variable "region" {
-  description = "AWS region. London, next to the production VPS."
+  description = "AWS region. Stockholm: the Free plan pins the account to a single region, others return AccessDenied."
   type        = string
-  default     = "eu-west-2"
+  default     = "eu-north-1"
 }
 
 variable "instance_type" {

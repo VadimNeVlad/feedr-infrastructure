@@ -1,5 +1,6 @@
-# Credentials come from the environment only: AWS_PROFILE pointing to an IAM Identity Center (SSO)
-# profile with short-lived credentials. No access keys in code, tfvars or ~/.aws/credentials.
+# Credentials come from the environment only: temporary keys of the MFA-protected Admin role,
+# exported by the AWS CLI (see README, `aws-lab`). The provider can't prompt for an MFA code itself,
+# so it never assumes the role on its own. No access keys or role ARNs in code or tfvars.
 provider "aws" {
   region = var.region
 
