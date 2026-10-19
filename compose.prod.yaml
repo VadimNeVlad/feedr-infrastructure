@@ -30,7 +30,7 @@ services:
       - data
     stop_grace_period: 30s
     shm_size: 256mb
-  
+
   migrate:
     <<: *defaults
     image: ghcr.io/vadimnevlad/feedr-backend-migrate:${BACKEND_TAG:?set BACKEND_TAG in .env}
@@ -42,7 +42,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-  
+
   backend:
     <<: *defaults
     image: ghcr.io/vadimnevlad/feedr-backend:${BACKEND_TAG:?set BACKEND_TAG in .env}
@@ -67,7 +67,7 @@ services:
     image: ghcr.io/vadimnevlad/feedr-frontend:${FRONTEND_TAG:?set FRONTEND_TAG in .env}
     networks:
       - edge
-  
+
   gateway:
     <<: *defaults
     image: nginxinc/nginx-unprivileged:alpine@sha256:26b0bf6fbf07297983cb341998d79c831508787de26627dd2a112321b9c3a4af

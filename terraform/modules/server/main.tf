@@ -53,6 +53,11 @@ resource "aws_vpc_security_group_ingress_rule" "https" {
 
 # Security groups are stateful: replies to these outgoing connections (apt, GHCR, Let's Encrypt)
 # are allowed automatically — unlike OVH's stateless Edge Network Firewall.
+#
+# Accepted: apt mirrors, GHCR and Let's Encrypt have no fixed IP ranges, so outbound traffic can't
+# be pinned to addresses in a security group. Real restriction needs an egress proxy or a NAT
+# with a firewall (and VPC endpoints for AWS services) — beyond this lab.
+#trivy:ignore:AWS-0104
 resource "aws_vpc_security_group_egress_rule" "all" {
   security_group_id = aws_security_group.server.id
   description       = "All outbound traffic"

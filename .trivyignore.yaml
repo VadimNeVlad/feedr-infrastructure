@@ -1,0 +1,19 @@
+# Accepted trivy findings that can't be suppressed next to the code (they're inside the
+# community VPC module). Findings in our own code are suppressed inline, above the resource.
+#
+# Every entry says why, and expires: after `expired_at` trivy reports the finding again and the
+# decision has to be made anew — a risk acceptance is temporary by design.
+
+misconfigurations:
+  - id: AWS-0164
+    statement: >-
+      Public subnet that assigns public IPs: the server is reached directly, there is no load
+      balancer or NAT gateway (cost). Goes away in stage 6: ALB in public subnets, server in a
+      private one.
+    expired_at: 2027-01-31
+
+  - id: AWS-0178
+    statement: >-
+      No VPC Flow Logs yet: shipping them costs per GB and nothing reads them so far.
+      To be enabled in stage 6 together with CloudWatch.
+    expired_at: 2027-01-31

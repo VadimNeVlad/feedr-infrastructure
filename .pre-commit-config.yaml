@@ -1,0 +1,48 @@
+# Checks that run on every `git commit` (after `pre-commit install`) and, later, in CI
+# (`pre-commit run --all-files`) — the same rules locally and in the pipeline.
+#
+# `rev` is a commit SHA, not a tag: a tag can be moved to other code, a SHA can't
+# (supply-chain safety). `pre-commit autoupdate --freeze` keeps them updated this way.
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c # frozen: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      # Last line of defence against committing an SSH or TLS private key.
+      - id: detect-private-key
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: 80c8033123f6d6b9ccd1a9458562ea4180742af7 # frozen: v1.109.2
+    hooks:
+      - id: terraform_fmt
+
+      # Runs `terraform init -backend=false` in every changed directory: no AWS credentials needed.
+      - id: terraform_validate
+        args:
+          - --hook-config=--retry-once-with-cleanup=true
+
+      # Mistakes `validate` can't see: invalid instance types, unused variables, deprecated syntax.
+      - id: terraform_tflint
+        args:
+          - --args=--config=__GIT_WORKING_DIR__/.tflint.hcl
+
+      # Security misconfigurations (open ports, unencrypted storage, ...). Accepted findings are
+      # suppressed in the code next to the resource, with the reason.
+      - id: terraform_trivy
+        args:
+          - --args=--skip-dirs="**/.terraform"
+          - --args=--ignorefile=__GIT_WORKING_DIR__/.trivyignore.yaml
+          # The version is pinned on purpose; don't nag about newer releases.
+          - --args=--skip-version-check
+
+      # Inputs/outputs tables in each module's README, regenerated from the code.
+      # This hook resolves the config path against the repo root itself — no __GIT_WORKING_DIR__.
+      - id: terraform_docs
+        files: ^terraform/modules/
+        args:
+          - --args=--config=.terraform-docs.yml

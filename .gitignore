@@ -18,6 +18,9 @@ acme/*
 *.tfstate.*
 *.tfplan
 tfplan
+# Modules don't pin providers (the calling environment does); `terraform test` in a module
+# directory still creates a lock file there.
+terraform/modules/**/.terraform.lock.hcl
 crash.log
 crash.*.log
 override.tf
