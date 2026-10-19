@@ -1,13 +1,21 @@
-variable "region" {
-  description = "AWS region. Stockholm: the Free plan pins the account to a single region, others return AccessDenied."
+variable "name" {
+  description = "Prefix for resource names, e.g. feedr-dev."
   type        = string
-  default     = "eu-north-1"
+}
+
+variable "vpc_id" {
+  description = "VPC to create the security group in."
+  type        = string
+}
+
+variable "subnet_id" {
+  description = "Public subnet for the instance."
+  type        = string
 }
 
 variable "instance_type" {
   description = "EC2 instance type. t3.small (2 GB) fits the whole stack; t3.micro (1 GB) needs swap and is tight."
   type        = string
-  default     = "t3.small"
 
   # Guardrail: only Free Tier eligible x86 types (accounts created after 2025-07-15).
   # x86 only — the application images are built for amd64, so no t4g (ARM).
@@ -35,7 +43,7 @@ variable "root_volume_size" {
 }
 
 variable "admin_cidr" {
-  description = "Your public IP as /32 — the only source allowed to SSH. Pass via TF_VAR_admin_cidr, not committed."
+  description = "The only source allowed to SSH, a single IPv4 address as /32."
   type        = string
 
   validation {
@@ -44,8 +52,7 @@ variable "admin_cidr" {
   }
 }
 
-variable "ssh_public_key_path" {
-  description = "Public key installed for the default 'ubuntu' user. A separate key for the lab, not the production one."
+variable "ssh_public_key" {
+  description = "Public key (file contents) installed for the default 'ubuntu' user. The module reads no files itself."
   type        = string
-  default     = "~/.ssh/feedr_aws_lab.pub"
 }

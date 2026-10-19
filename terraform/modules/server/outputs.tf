@@ -12,8 +12,3 @@ output "ami_id" {
   description = "Ubuntu AMI the instance was created from."
   value       = aws_instance.server.ami
 }
-
-output "ssh_command" {
-  description = "Connect as the AMI's default user."
-  value       = "ssh -i ${trimsuffix(pathexpand(var.ssh_public_key_path), ".pub")} ubuntu@${aws_instance.server.public_ip}"
-}
