@@ -13,8 +13,8 @@ Terraform state bucket live in the separate **aws-platform** repository.
 modules/            how things are built — shared by every environment
 ├── network/        VPC, one public subnet, internet gateway, locked default SG
 │                   (wraps terraform-aws-modules/vpc, pinned)
-└── server/         security group (SSH from your IP, 80/443 from anywhere), key pair,
-                    Ubuntu EC2 (encrypted gp3, IMDSv2, T3 standard credits)
+└── server/         security group (80/443 from anywhere, no SSH), instance role for
+                    Session Manager, Ubuntu EC2 (encrypted gp3, IMDSv2, T3 standard credits)
 envs/               what differs — one directory = one root module = one state
 ├── dev/            feedr-dev,  10.20.0.0/16, t3.micro
 └── prod/           feedr-prod, 10.30.0.0/16, t3.small
@@ -26,12 +26,19 @@ account to a single region). Each environment keeps its state in the shared buck
 
 A change to a module reaches every environment: apply it to `dev` first, then `prod`.
 
-## One-time setup
+## Shell access: Session Manager, no SSH
 
-**[WSL]** A separate SSH key for AWS (not the production `feedr_vps`):
+The server has no SSH port, no key pair and no allowed admin IP. A shell is opened through AWS
+Systems Manager: the SSM Agent on the server keeps an outbound HTTPS connection to AWS, and
+`aws ssm start-session` reaches it through that — authorised by IAM (the MFA-protected `Admin`
+role) and recorded in CloudTrail.
+
+**[WSL]** One-time: the Session Manager plugin for the AWS CLI (official package from AWS):
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/feedr_aws_lab -C feedr-aws-lab
+curl -fsSLo /tmp/session-manager-plugin.deb \
+  https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb
+sudo dpkg -i /tmp/session-manager-plugin.deb && session-manager-plugin --version
 ```
 
 ## Run
@@ -39,18 +46,16 @@ ssh-keygen -t ed25519 -f ~/.ssh/feedr_aws_lab -C feedr-aws-lab
 All commands in WSL, from `envs/<env>/`.
 
 ```bash
-aws-lab   # every new shell, and again on ExpiredToken (4 hours); also refreshes TF_VAR_admin_cidr
+aws-lab   # every new shell, and again on ExpiredToken (4 hours)
 ```
 
 ```bash
 terraform init
 terraform fmt -recursive -check ../.. && terraform validate
-terraform plan -out=tfplan   # expect: 16 to add, 0 to change, 0 to destroy
+terraform plan -out=tfplan   # expect: 17 to add, 0 to change, 0 to destroy
 terraform apply tfplan
-terraform output -raw ssh_command
+eval "$(terraform output -raw session_command)"   # the agent needs 1–2 minutes after boot
 ```
-
-Your home IP changes → SSH times out → `aws-lab` again and `terraform apply` (only the SSH rule changes).
 
 ## Destroy — every time you finish
 

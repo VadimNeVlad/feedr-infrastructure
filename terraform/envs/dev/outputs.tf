@@ -13,7 +13,7 @@ output "ami_id" {
   value       = module.server.ami_id
 }
 
-output "ssh_command" {
-  description = "Connect as the AMI's default user."
-  value       = "ssh -i ${trimsuffix(pathexpand(var.ssh_public_key_path), ".pub")} ubuntu@${module.server.public_ip}"
+output "session_command" {
+  description = "Shell on the server through Session Manager (needs the session-manager-plugin)."
+  value       = "aws ssm start-session --target ${module.server.instance_id}"
 }

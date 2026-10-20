@@ -1,19 +1,18 @@
 # Module: server
 
-One Ubuntu EC2 server for the FeedR stack with production's exposure: SSH only from the admin IP,
-HTTP/HTTPS from anywhere. Hardened by default: IMDSv2 with hop limit 1, encrypted gp3 root volume,
-T3 `standard` credits, AMI from Canonical's SSM parameter (ignored after creation).
+One Ubuntu EC2 server for the FeedR stack: HTTP/HTTPS from anywhere, no SSH — shell access only
+through Session Manager (instance role with `AmazonSSMManagedInstanceCore`, no key pair, no port 22).
+Hardened by default: IMDSv2 with hop limit 1, encrypted gp3 root volume, T3 `standard` credits,
+AMI from Canonical's SSM parameter (ignored after creation).
 
 ```hcl
 module "server" {
   source = "../../modules/server"
 
-  name           = "feedr-dev"
-  vpc_id         = module.network.vpc_id
-  subnet_id      = module.network.public_subnet_id
-  instance_type  = "t3.micro"
-  admin_cidr     = var.admin_cidr
-  ssh_public_key = file(pathexpand(var.ssh_public_key_path))
+  name          = "feedr-dev"
+  vpc_id        = module.network.vpc_id
+  subnet_id     = module.network.public_subnet_id
+  instance_type = "t3.micro"
 }
 ```
 

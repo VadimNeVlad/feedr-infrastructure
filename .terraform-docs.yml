@@ -6,6 +6,12 @@ output:
   file: README.md
   mode: inject
 
+# "Providers" lists the provider version installed locally (from .terraform/), which differs between
+# machines and CI; "Requirements" already shows the module's version constraints.
+sections:
+  hide:
+    - providers
+
 sort:
   enabled: true
   by: required

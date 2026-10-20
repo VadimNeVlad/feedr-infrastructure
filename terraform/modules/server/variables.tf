@@ -41,18 +41,3 @@ variable "root_volume_size" {
     error_message = "root_volume_size must be between 10 and 30 GiB."
   }
 }
-
-variable "admin_cidr" {
-  description = "The only source allowed to SSH, a single IPv4 address as /32."
-  type        = string
-
-  validation {
-    condition     = can(cidrhost(var.admin_cidr, 0)) && endswith(var.admin_cidr, "/32")
-    error_message = "admin_cidr must be a single IPv4 address in /32 form, e.g. 203.0.113.10/32."
-  }
-}
-
-variable "ssh_public_key" {
-  description = "Public key (file contents) installed for the default 'ubuntu' user. The module reads no files itself."
-  type        = string
-}

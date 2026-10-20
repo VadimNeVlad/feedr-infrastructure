@@ -20,7 +20,4 @@ module "server" {
   vpc_id        = module.network.vpc_id
   subnet_id     = module.network.public_subnet_id
   instance_type = "t3.small"
-
-  admin_cidr     = var.admin_cidr
-  ssh_public_key = file(pathexpand(var.ssh_public_key_path))
 }

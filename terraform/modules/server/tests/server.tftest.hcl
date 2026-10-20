@@ -8,15 +8,20 @@ mock_provider "aws" {
       insecure_value = "ami-0123456789abcdef0"
     }
   }
+
+  # The IAM policy document renders JSON from its arguments; a mock would return a random string.
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+    }
+  }
 }
 
 variables {
-  name           = "test"
-  vpc_id         = "vpc-0123456789abcdef0"
-  subnet_id      = "subnet-0123456789abcdef0"
-  instance_type  = "t3.micro"
-  admin_cidr     = "203.0.113.10/32"
-  ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyOnly test"
+  name          = "test"
+  vpc_id        = "vpc-0123456789abcdef0"
+  subnet_id     = "subnet-0123456789abcdef0"
+  instance_type = "t3.micro"
 }
 
 run "instance_is_hardened" {
@@ -43,12 +48,18 @@ run "instance_is_hardened" {
   }
 }
 
-run "ssh_is_open_only_to_admin_ip" {
+run "shell_access_only_through_session_manager" {
   command = plan
 
+  # (key_name can't be asserted to be empty: it's a computed attribute, unknown at plan time.)
   assert {
-    condition     = aws_vpc_security_group_ingress_rule.ssh.cidr_ipv4 == var.admin_cidr
-    error_message = "SSH must be allowed only from admin_cidr."
+    condition     = aws_instance.server.iam_instance_profile == "test-server"
+    error_message = "The instance must have the module's instance profile (SSM Agent needs it)."
+  }
+
+  assert {
+    condition     = aws_iam_role_policy_attachment.server_ssm.policy_arn == "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+    error_message = "The instance role must have exactly the SSM core policy."
   }
 }
 
@@ -60,14 +71,4 @@ run "rejects_non_free_tier_instance_type" {
   }
 
   expect_failures = [var.instance_type]
-}
-
-run "rejects_ssh_from_a_whole_network" {
-  command = plan
-
-  variables {
-    admin_cidr = "0.0.0.0/0"
-  }
-
-  expect_failures = [var.admin_cidr]
 }
