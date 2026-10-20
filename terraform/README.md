@@ -15,6 +15,8 @@ modules/            how things are built — shared by every environment
 │                   (wraps terraform-aws-modules/vpc, pinned)
 └── server/         security group (80/443 from anywhere, no SSH), instance role for
                     Session Manager, Ubuntu EC2 (encrypted gp3, IMDSv2, T3 standard credits)
+shared/             kept between deploy/destroy cycles, used by every environment:
+                    ECR repositories (see shared/README.md)
 envs/               what differs — one directory = one root module = one state
 ├── dev/            feedr-dev,  10.20.0.0/16, t3.micro
 └── prod/           feedr-prod, 10.30.0.0/16, t3.small
@@ -67,7 +69,8 @@ Check that nothing is left (should print nothing; the tagging API lags a few min
 `aws ec2 describe-*` is the final word):
 
 ```bash
-aws resourcegroupstaggingapi get-resources --tag-filters Key=Project,Values=feedr \
+aws resourcegroupstaggingapi get-resources \
+  --tag-filters Key=Project,Values=feedr Key=Environment,Values=dev,prod \
   --query 'ResourceTagMappingList[].ResourceARN' --output text
 ```
 
