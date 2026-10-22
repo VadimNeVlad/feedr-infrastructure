@@ -7,6 +7,10 @@ terraform {
       # The exact version is pinned in .terraform.lock.hcl (committed); this is the allowed range.
       version = "~> 6.68"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.9"
+    }
   }
 
   # Shared state bucket from the aws-platform repository (bootstrap stack); one key per

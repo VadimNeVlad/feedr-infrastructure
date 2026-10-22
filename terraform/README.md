@@ -13,10 +13,11 @@ Terraform state bucket live in the separate **aws-platform** repository.
 modules/            how things are built — shared by every environment
 ├── network/        VPC, one public subnet, internet gateway, locked default SG
 │                   (wraps terraform-aws-modules/vpc, pinned)
+├── app-secrets/    per-environment generated secrets (JWT) — never stored in the state
 └── server/         security group (80/443 from anywhere, no SSH), instance role for
                     Session Manager, Ubuntu EC2 (encrypted gp3, IMDSv2, T3 standard credits)
 shared/             kept between deploy/destroy cycles, used by every environment:
-                    ECR repositories (see shared/README.md)
+                    ECR repositories, Cloudinary secret (see shared/README.md)
 envs/               what differs — one directory = one root module = one state
 ├── dev/            feedr-dev,  10.20.0.0/16, t3.micro
 └── prod/           feedr-prod, 10.30.0.0/16, t3.small
@@ -54,7 +55,7 @@ aws-lab   # every new shell, and again on ExpiredToken (4 hours)
 ```bash
 terraform init
 terraform fmt -recursive -check ../.. && terraform validate
-terraform plan -out=tfplan   # expect: 17 to add, 0 to change, 0 to destroy
+terraform plan -out=tfplan   # expect: 19 to add, 0 to change, 0 to destroy
 terraform apply tfplan
 eval "$(terraform output -raw session_command)"   # the agent needs 1–2 minutes after boot
 ```

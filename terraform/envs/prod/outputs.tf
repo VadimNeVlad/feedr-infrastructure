@@ -17,3 +17,8 @@ output "session_command" {
   description = "Shell on the server through Session Manager (needs the session-manager-plugin)."
   value       = "aws ssm start-session --target ${module.server.instance_id}"
 }
+
+output "jwt_secret_arn" {
+  description = "Secrets Manager secret with the backend's JWT signing key (value never in the state)."
+  value       = module.secrets.jwt_secret_arn
+}

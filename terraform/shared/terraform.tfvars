@@ -1,0 +1,1 @@
+cloudinary_cloud_name = "dln41vjbh"

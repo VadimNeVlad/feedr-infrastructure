@@ -4,6 +4,19 @@ Project resources used by every environment and kept between their deploy/destro
 
 - ECR repositories `feedr-backend`, `feedr-backend-migrate`, `feedr-frontend`: immutable tags,
   scan on push, lifecycle (untagged after 1 day, last 10 `sha-*` releases kept).
+- Secrets Manager secret `feedr/cloudinary` (`{"api_key", "api_secret"}`) and Parameter Store
+  `/feedr/cloudinary/cloud_name`. Terraform creates the secret but never its value — set it by hand
+  (below); `cloudinary_cloud_name` goes in `terraform.tfvars` (public, it's in every image URL).
+
+Setting or replacing the Cloudinary credentials (the value never reaches the shell history,
+the process list or the Terraform state):
+
+```bash
+read -rp "Cloudinary API key: " CK && read -rsp "Cloudinary API secret: " CS && echo \
+  && jq -n --arg k "$CK" --arg s "$CS" '{api_key: $k, api_secret: $s}' \
+  | aws secretsmanager put-secret-value --secret-id feedr/cloudinary --secret-string file:///dev/stdin \
+      --query VersionId --output text; unset CK CS
+```
 
 State: `feedr-infrastructure/shared/terraform.tfstate` in the shared bucket. Tagged
 `Environment = shared`, so the "nothing left" check after destroying `dev`/`prod` doesn't list it.
@@ -11,7 +24,7 @@ State: `feedr-infrastructure/shared/terraform.tfstate` in the shared bucket. Tag
 ```bash
 # [WSL] from this directory, after aws-lab
 terraform init
-terraform plan -out=tfplan   # first time: 6 to add
+terraform plan -out=tfplan
 terraform apply tfplan
 ```
 

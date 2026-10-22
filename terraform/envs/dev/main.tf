@@ -21,3 +21,9 @@ module "server" {
   subnet_id     = module.network.public_subnet_id
   instance_type = "t3.micro"
 }
+
+module "secrets" {
+  source = "../../modules/app-secrets"
+
+  environment = "dev"
+}
